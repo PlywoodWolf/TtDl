@@ -21,13 +21,10 @@ def dprint(*line):
 
 
 def parse_links(resp, url):
-    global visited
     soup = bS(resp.text, 'html.parser')
     dprint(resp.headers)
-    visited = visited.add(url)
     dprint(resp.headers)
-    new_urls = (urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem dir'))
-    return [nurl for nurl in new_urls if nurl not in visited]
+    return [urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem dir')]
     # [await urls.put(nurl) for nurl in new_urls if nurl not in visited]
 
 async def crawl(name, urls):
