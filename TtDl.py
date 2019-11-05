@@ -20,20 +20,26 @@ def dprint(*line):
         print(line, file=sys.stderr)
 
 
-async def crawl(name, urls):
+def parse_links(resp, url):
     global visited
+    soup = bS(resp.text, 'html.parser')
+    dprint(resp.headers)
+    visited = visited.add(url)
+    dprint(resp.headers)
+    new_urls = (urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem dir'))
+    return [nurl for nurl in new_urls if nurl not in visited]
+    # [await urls.put(nurl) for nurl in new_urls if nurl not in visited]
+
+async def crawl(name, urls):
     global files
     url = await urls.get()
     resp = rq.get(url)
-    # dprint(resp.headers)
-    soup = bS(resp.text, 'html.parser')
-    # visited = visited | {url}
-    new_urls = (urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem dir'))
-    [await urls.put(nurl) for nurl in new_urls if nurl not in visited]
+    dprint(resp.headers)
+    [await urls.put(i) for i in parse_links(resp, url)]
     dprint(name)
     # files |= {urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem file')}
-    dprint(urls.qsize())
-    urls.task_done()
+    # dprint(urls.qsize())
+    #urls.task_done()
 
 
 async def main(url):
@@ -63,6 +69,7 @@ async def main(url):
     # pool.join()
 
 if __name__ == '__main__':
+    # asyncio.run(main(startUrl))
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main(startUrl))
 
