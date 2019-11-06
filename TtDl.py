@@ -1,32 +1,41 @@
 #!/usr/bin/python
 # import multiprocessing as mp
 from bs4 import BeautifulSoup as bS
-import requests as rq
+# import requests as rq
 from requests.compat import urljoin
 import asyncio
-# import aiohttp
+import aiohttp
 import sys
 
 
-debug = True
-visited = {}
-files = {}
-startUrl = 'https://thetrove.net/index.html'
+debug = 1
+startUrl = 'https://thetrove.net/Assets/Maps%20&%20Tiles/'
 
-class linkList:
+
+class LinkList:
     def __init__(self):
-        dprint('creating linkList obj')
-        self.visited = {}
+        dprint('creating LinkList obj')
+        self.visited = set()
+        self.files = dict()
         dprint('visited = ', self.visited)
 
-    def filter(self, lst):
-        return [lnk for lnk in lst if lnk not in self.visited]
+    async def filter(self, lst):
+        f = [lnk for lnk in lst if lnk not in self.visited]
+        return f
 
-    def add(self, url):
-        dprint('adding', url, 'to visited')
+    async def add(self, url):
         self.visited.add(url)
-        dprint('added', url, 'to visited')
 
+    async def addf(self, files):
+        dprint('adding', files, 'to files list')
+        [self.files.update({file[0]:file[1]}) for file in files]
+
+
+async def fetch(session, url):
+    # dprint('fetching', url)
+    async with session.get(url) as response:
+        # dprint('fetching', url)
+        return await response.text()
 
 
 def dprint(*line):
@@ -36,54 +45,61 @@ def dprint(*line):
 
 
 def parse_links(resp, url):
-    soup = bS(resp.text, 'html.parser')
-    return [urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem dir')]
-    # [await urls.put(nurl) for nurl in new_urls if nurl not in visited]
+    soup = bS(resp, 'html.parser')
+    links = [urljoin(url, tr.find('a').get('href'))+'/' for tr in soup.find_all('tr', class_='litem dir')]
+    dprint(url, links)
+    return links
 
-async def crawl(name, urls, visited):
-    global files
-    url = await urls.get()
-    resp = rq.get(url)
-    dprint(resp.headers)
-    visited.add(url)
-    dprint('!')
-    [await urls.add(k) for k in visited.filter(parse_links(resp, url))]
-    dprint(name)
+
+def parse_files(resp, url):
+    soup = bS(resp, 'html.parser')
+    items = soup.find_all('tr', class_='litem file')
+    # dprint(items[0].find('td', class_='litem_size'))
+    files = [(urljoin(url, tr.find('a').get('href')), tr.find('td', class_='litem_size').string) for tr in items]
+    dprint(url, files)
+    return files
+
+
+async def crawl(name, urls, visited, session):
+    while True:
+        url = await urls.get()
+        dprint(name, 'fetching', url)
+        resp = await fetch(session, url)
+        await visited.add(url)
+        dprint(name, 'adding', url, 'to visited')
+        filtered = await visited.filter(parse_links(resp, url))
+        files = parse_files(resp, url)
+        await visited.addf(files)
+        dprint(name, 'filtered url list', filtered)
+        [await urls.put(k) for k in filtered]
     # files |= {urljoin(url, td.find('a').get('href')) for td in soup.find_all('tr', class_='litem file')}
-    dprint(urls.qsize())
-    #urls.task_done()
+        urls.task_done()
+        print('Queue length :', urls.qsize())
 
 
 async def main(url):
-    # m = mp.Manager()
-    # urls = m.Queue()
-    # visited = m.Queue()
-    # files = m.Queue()
     urls = asyncio.Queue()
-    visited = linkList()
+    visited = LinkList()
     await urls.put(url)
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for i in range(200):
+            task = asyncio.create_task(crawl(f'worker-{i}', urls, visited, session))
+            tasks.append(task)
 
-    tasks = []
-    for i in range(10):
-        task = asyncio.create_task(crawl(f'worker-{i}', urls, visited))
-        tasks.append(task)
-
-    await urls.join()
+        dprint(urls.qsize())
+        await urls.join()
 
     for task in tasks:
         task.cancel()
-
+    print('Files found :', len(visited.files))
+    print('Pages visited :', len(visited.visited))
+    defs = {'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4}
+    size = sum([float(lh) * defs[rh] for lh, rh in [e.split() for e in visited.files.values()]])
+    sd = 'GB'
+    print('Total file size is {:0.5} {}'.format(size / defs[sd], sd))
     await asyncio.gather(*tasks, return_exceptions=True)
 
-    # pool = mp.Pool(mp.cpu_count())
-    # while not urls.empty():
-    #    a = pool.apply_async(crawl, (urls, visited, files), callback=dprint)
-    # pool.close()
-    # pool.join()
 
 if __name__ == '__main__':
     asyncio.run(main(startUrl))
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(main(startUrl))
-
-# crawl(startUrl)

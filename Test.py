@@ -1,22 +1,31 @@
-import asyncio
+import tkinter.tix as Tix
 
+class View(object):
+    def __init__(self, root):
+        self.root = root
+        self.makeCheckList()
 
-async def say(what, when):
-    await asyncio.sleep(when)
-    print(what)
+    def makeCheckList(self):
+        self.cl = Tix.CheckList(self.root, browsecmd=self.selectItem)
+        self.cl.pack()
+        self.cl.hlist.add("CL1", text="checklist1")
+        self.cl.hlist.add("CL1.Item1", text="subitem1")
+        self.cl.hlist.add("CL2", text="checklist2")
+        self.cl.hlist.add("CL2.Item1", text="subitem1")
+        self.cl.setstatus("CL2", "on")
+        self.cl.setstatus("CL2.Item1", "on")
+        self.cl.setstatus("CL1", "off")
+        self.cl.setstatus("CL1.Item1", "off")
+        self.cl.autosetmode()
 
+    def selectItem(self, item):
+        print(item, self.cl.getstatus(item))
 
-async def stop_after(loop, when):
-    await asyncio.sleep(when)
-    loop.stop()
+def main():
+    root = Tix.Tk()
+    view = View(root)
+    root.update()
+    root.mainloop()
 
-
-loop = asyncio.get_event_loop()
-
-loop.create_task(say('first hello', 2))
-loop.create_task(say('second hello', 1))
-loop.create_task(say('third hello', 4))
-loop.create_task(stop_after(loop, 3))
-
-loop.run_forever()
-loop.close()
+if __name__ == '__main__':
+    main()
